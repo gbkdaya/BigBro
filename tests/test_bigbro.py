@@ -161,3 +161,111 @@ def test_free_provider_requires_key(monkeypatch):
 def test_default_provider_is_free():
     from bigbro.config import Config
     assert Config().provider == "free"
+
+
+def _make_site(tmp_path, subdir="dist"):
+    target = tmp_path / "ws" / "projects" / "demo-site"
+    if subdir:
+        target = target / subdir
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "index.html").write_text("<h1>hi from bigbro</h1>")
+    return target
+
+
+def test_deploy_netlify_with_mocked_api(tmp_path, monkeypatch):
+    import io
+    import zipfile
+
+    from bigbro.capabilities import deploy as dep
+
+    _make_site(tmp_path)
+    monkeypatch.setenv("NETLIFY_AUTH_TOKEN", "nt_fake")
+    calls = []
+
+    def fake_post(url, *a, **k):
+        calls.append((url, k))
+
+        class R:
+            status_code = 200
+
+            def json(self):
+                if url.rstrip("/").endswith("/sites"):
+                    return {"id": "site_1", "name": "demo-site", "ssl_url": "https://demo-site.netlify.app"}
+                return {"state": "ready", "ssl_url": "https://demo-site.netlify.app"}
+
+        return R()
+
+    monkeypatch.setattr(dep.requests, "post", fake_post)
+    bb = make_bb(tmp_path)
+    out = bb._by_name["deploy_project"].execute(platform="netlify", project="demo-site", subdir="dist")
+    assert "https://demo-site.netlify.app" in out
+    # second API call is the zip upload — verify the archive contains the site
+    deploy_url, kw = calls[1]
+    assert deploy_url.endswith("/sites/site_1/deploys")
+    zf = zipfile.ZipFile(io.BytesIO(kw["data"]))
+    assert "index.html" in zf.namelist()
+    assert zf.read("index.html").decode() == "<h1>hi from bigbro</h1>"
+
+
+def test_deploy_vercel_with_mocked_api(tmp_path, monkeypatch):
+    import base64
+
+    from bigbro.capabilities import deploy as dep
+
+    _make_site(tmp_path, subdir=None)
+    monkeypatch.setenv("VERCEL_TOKEN", "vc_fake")
+    calls = []
+
+    def fake_post(url, *a, **k):
+        calls.append((url, k))
+
+        class R:
+            status_code = 200
+
+            def json(self):
+                if url.rstrip("/").endswith("/projects"):
+                    return {"id": "prj_1", "name": "demo-site"}
+                return {"url": "demo-site.vercel.app", "state": "READY"}
+
+        return R()
+
+    monkeypatch.setattr(dep.requests, "post", fake_post)
+    bb = make_bb(tmp_path)
+    out = bb._by_name["deploy_project"].execute(platform="vercel", project="demo-site")
+    assert "https://demo-site.vercel.app" in out
+    _, kw = calls[1]
+    files = {f["file"]: f["data"] for f in kw["json"]["files"]}
+    assert base64.b64decode(files["index.html"]).decode() == "<h1>hi from bigbro</h1>"
+
+
+def test_deploy_requires_token(tmp_path, monkeypatch):
+    monkeypatch.delenv("NETLIFY_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("VERCEL_TOKEN", raising=False)
+    bb = make_bb(tmp_path)
+    out = bb._by_name["deploy_project"].execute(platform="netlify", project="demo-site")
+    assert out.startswith("ERROR") and "NETLIFY_AUTH_TOKEN" in out
+    out = bb._by_name["deploy_project"].execute(platform="vercel", project="demo-site")
+    assert out.startswith("ERROR") and "VERCEL_TOKEN" in out
+
+
+def test_commit_all(tmp_path):
+    import subprocess
+
+    proj = tmp_path / "ws" / "projects" / "demo-site"
+    proj.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=proj, check=True)
+    subprocess.run(["git", "config", "user.email", "bigbro@test.local"], cwd=proj, check=True)
+    subprocess.run(["git", "config", "user.name", "BigBro"], cwd=proj, check=True)
+    (proj / "a.txt").write_text("hello")
+
+    bb = make_bb(tmp_path)
+    out = bb._by_name["commit_all"].execute(project="projects/demo-site", message="first build")
+    assert "Committed" in out
+    log = subprocess.run(
+        ["git", "log", "-1", "--format=%s"], cwd=proj, capture_output=True, text=True
+    ).stdout
+    assert log.startswith("bigbro ") and "first build" in log
+
+    # second commit with no changes
+    out2 = bb._by_name["commit_all"].execute(project="projects/demo-site", message="again")
+    assert "Nothing to commit" in out2

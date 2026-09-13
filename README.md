@@ -91,7 +91,19 @@ docker compose up --build     # web dashboard at http://127.0.0.1:8321
 | `git`             | Safe git ops: init, status, add, commit, diff, log, branch, pull, push |
 | `fetch_url`       | Read web pages/API docs (HTML stripped)                             |
 | `http_request`    | Send HTTP requests to test your own APIs and integrations           |
+| `deploy_project`  | Deploy a built website to **Netlify or Vercel** — returns the live URL |
+| `commit_all`      | Stage + commit a project with a timestamped message (`bigbro <timestamp>: ...`) |
 | `save_note`       | *(example of a user capability)* sticky notes in `workspace/notes.md` |
+
+### Deploying a website (free)
+
+1. BigBro builds the site (`npm run build`).
+2. You add a **free** token to `.env` once:
+   - Netlify: `NETLIFY_AUTH_TOKEN` — https://app.netlify.com/user/applications#applications
+   - Vercel: `VERCEL_TOKEN` — https://vercel.com/account/tokens
+3. Tell BigBro *"deploy my site to Netlify/Vercel"* — it uploads the build output and gives you the live URL.
+
+Optionally set `NETLIFY_SITE_ID` / `VERCEL_PROJECT_ID` in `.env` to redeploy to the same site instead of creating a new one. Tokens are read at deploy time and never shown in chat.
 
 Workflow BigBro follows: **inspect → brief plan → scaffold/modify → verify (runs builds/tests) → report**
 (changed files, how to run, open decisions). Session transcripts are saved to `workspace/sessions/`.
