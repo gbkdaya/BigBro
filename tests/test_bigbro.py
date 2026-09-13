@@ -133,12 +133,18 @@ def test_resolve_free_model_cache_and_fallback(tmp_path, monkeypatch):
         raise AssertionError("fresh cache must not hit the network")
 
     monkeypatch.setattr(free_model.requests, "get", boom)
-    cache.write_text(_json.dumps({"ts": _time.time(), "model": "cached/model:free"}))
+    cache.write_text(_json.dumps({
+        "ts": _time.time(), "model": "cached/model:free",
+        "candidates": ["cached/model:free", "cached/older:free"],
+    }))
     model, source = free_model.resolve_free_model(cache_file=cache)
     assert model == "cached/model:free" and source == "cache"
 
     # 2) stale cache + offline → fallback constant
-    cache.write_text(_json.dumps({"ts": _time.time() - 10**7, "model": "cached/model:free"}))
+    cache.write_text(_json.dumps({
+        "ts": _time.time() - 10**7, "model": "cached/model:free",
+        "candidates": ["cached/model:free"],
+    }))
     model, source = free_model.resolve_free_model(cache_file=cache)
     assert source == "fallback" and model == free_model.FALLBACK_FREE_MODEL
 
@@ -146,7 +152,131 @@ def test_resolve_free_model_cache_and_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(free_model.requests, "get", lambda *a, **k: _FakeResp())
     model, source = free_model.resolve_free_model(cache_file=cache)
     assert source == "live" and model == "newest/free-with-tools:free"
-    assert _json.loads(cache.read_text())["model"] == "newest/free-with-tools:free"
+    cached = _json.loads(cache.read_text())
+    assert cached["model"] == "newest/free-with-tools:free"
+    assert cached["candidates"][0] == "newest/free-with-tools:free"
+
+
+class _StatusResp:
+    def __init__(self, code, body):
+        self.status_code = code
+        self._body = body
+        self.text = str(body)
+
+    def json(self):
+        return self._body
+
+
+def test_free_provider_fails_over_on_rate_limit():
+    from bigbro.llm.base import ChatResult
+    from bigbro.llm.free_model import FreeModelProvider
+    from bigbro.llm.openai_compat import RateLimitedError
+
+    calls = []
+
+    class Fake:
+        def __init__(self, model, fail):
+            self.model = model
+            self.fail = fail
+
+        def chat(self, messages, tools):
+            calls.append(self.model)
+            if self.fail:
+                raise RateLimitedError(self.model)
+            return ChatResult(content=f"ok from {self.model}")
+
+    p = FreeModelProvider("http://x", "k", ["a:free", "b:free", "c:free"], source="test")
+    p._providers = [Fake("a:free", True), Fake("b:free", False), Fake("c:free", False)]
+    res = p.chat([], [])
+    assert res.content == "ok from b:free"
+    assert p.model == "b:free"
+
+    # subsequent calls start at the working model
+    calls.clear()
+    p.chat([], [])
+    assert calls == ["b:free"]
+
+
+def test_compat_retries_transient_400_then_succeeds(monkeypatch):
+    from bigbro.llm import openai_compat
+
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    passthrough = _StatusResp(400, {"error": {"message": "Provider returned error", "code": 400,
+                                              "metadata": {"raw": '{"message":"invalid request error trace_id:abc"}',
+                                                           "provider_name": "Novita"}}})
+    ok = _StatusResp(200, {"choices": [{"message": {"role": "assistant", "content": "hi", "tool_calls": []}}]})
+    responses = [passthrough, ok]
+    monkeypatch.setattr(openai_compat.requests, "post", lambda *a, **k: responses.pop(0))
+    p = openai_compat.OpenAICompatProvider("http://x", "k", "m")
+    assert p.chat([], []).content == "hi"
+
+
+def test_compat_raises_transient_after_retries(monkeypatch):
+    from bigbro.llm import openai_compat
+
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    passthrough = _StatusResp(400, {"error": {"message": "Provider returned error"}})
+    monkeypatch.setattr(openai_compat.requests, "post", lambda *a, **k: passthrough)
+    p = openai_compat.OpenAICompatProvider("http://x", "k", "m")
+    with pytest.raises(openai_compat.ProviderTransientError):
+        p.chat([], [])
+
+
+def test_free_provider_fails_over_on_transient_error():
+    from bigbro.llm.base import ChatResult
+    from bigbro.llm.free_model import FreeModelProvider
+    from bigbro.llm.openai_compat import ProviderTransientError
+
+    class Fake:
+        def __init__(self, model, fail):
+            self.model = model
+            self.fail = fail
+
+        def chat(self, messages, tools):
+            if self.fail:
+                raise ProviderTransientError(self.model)
+            return ChatResult(content=f"ok from {self.model}")
+
+    p = FreeModelProvider("http://x", "k", ["a:free", "b:free"])
+    p._providers = [Fake("a:free", True), Fake("b:free", False)]
+    res = p.chat([], [])
+    assert res.content == "ok from b:free"
+    assert p.model == "b:free"
+
+
+def test_free_provider_exhausts_all_candidates():
+    from bigbro.llm.free_model import FreeModelProvider
+    from bigbro.llm.openai_compat import RateLimitedError
+
+    class Fake:
+        def chat(self, messages, tools):
+            raise RateLimitedError("x")
+
+    p = FreeModelProvider("http://x", "k", ["a:free", "b:free"])
+    p._providers = [Fake(), Fake()]
+    with pytest.raises(RuntimeError, match="rate-limited"):
+        p.chat([], [])
+
+
+def test_compat_retries_429_then_succeeds(monkeypatch):
+    from bigbro.llm import openai_compat
+
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    ok = {"choices": [{"message": {"role": "assistant", "content": "hi", "tool_calls": []}}]}
+    responses = [_StatusResp(429, {}), _StatusResp(429, {}), _StatusResp(200, ok)]
+    monkeypatch.setattr(openai_compat.requests, "post", lambda *a, **k: responses.pop(0))
+    p = openai_compat.OpenAICompatProvider("http://x", "k", "m")
+    assert p.chat([], []).content == "hi"
+
+
+def test_compat_raises_rate_limited_after_retries(monkeypatch):
+    from bigbro.llm import openai_compat
+
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    monkeypatch.setattr(openai_compat.requests, "post", lambda *a, **k: _StatusResp(429, {}))
+    p = openai_compat.OpenAICompatProvider("http://x", "k", "m")
+    with pytest.raises(openai_compat.RateLimitedError):
+        p.chat([], [])
 
 
 def test_free_provider_requires_key(monkeypatch):

@@ -41,6 +41,12 @@ that support **tool calling**, and uses the most recently released one. The pick
 Which model is answering is shown in the CLI banner and the dashboard header.
 Set `BIGBRO_MODEL` to pin a specific model if you prefer a stable one.
 
+**Free-tier reality check:** OpenRouter's free tier is capped at ~50 requests/day (resets daily;
+1,000/day if you ever add $10 of lifetime credits). One BigBro task typically uses 2–10 requests.
+If the newest free model is rate-limited, BigBro **automatically fails over to the next-newest
+free model** (5 kept on standby) and sticks with whichever works for the rest of the session.
+If all of them are exhausted you get a clear "try again in a few minutes" error.
+
 ### Talk to BigBro — terminal
 
 ```bash

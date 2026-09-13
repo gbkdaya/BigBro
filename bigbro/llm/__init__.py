@@ -34,12 +34,10 @@ def make_provider(cfg):
         if not key:
             raise RuntimeError(OPENROUTER_KEY_HELP)
         if provider == "free":
-            from .free_model import resolve_free_model
+            from .free_model import FreeModelProvider, resolve_free_candidates
 
-            model, source = resolve_free_model()
-            p = OpenAICompatProvider(base, key, model, cfg.temperature)
-            p.model_source = "auto: latest free model (%s)" % source
-            return p
+            candidates, source = resolve_free_candidates()
+            return FreeModelProvider(base, key, candidates, cfg.temperature, source)
         return OpenAICompatProvider(base, key, cfg.model_for_provider("openrouter"), cfg.temperature)
 
     if provider == "openai":
