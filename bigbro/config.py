@@ -14,6 +14,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 
 PROVIDER_DEFAULT_MODELS = {
+    # keep in sync with bigbro/llm/free_model.py
+    "free": "inclusionai/ling-3.0-flash-vl:free",
+    "openrouter": "inclusionai/ling-3.0-flash-vl:free",
     "openai": "gpt-5",
     "anthropic": "claude-sonnet-4-5",
     "gemini": "gemini-2.5-flash",
@@ -24,7 +27,7 @@ PROVIDER_DEFAULT_MODELS = {
 
 @dataclass
 class Config:
-    provider: str = "openai"
+    provider: str = "free"
     model: str = ""
     workspace: Path = PROJECT_ROOT / "workspace"
     token: str = ""
@@ -49,7 +52,7 @@ def load_config() -> Config:
     if not ws.is_absolute():
         ws = (PROJECT_ROOT / ws).resolve()
     return Config(
-        provider=os.environ.get("BIGBRO_PROVIDER", "openai").strip().lower(),
+        provider=os.environ.get("BIGBRO_PROVIDER", "free").strip().lower(),
         model=os.environ.get("BIGBRO_MODEL", "").strip(),
         workspace=ws,
         token=os.environ.get("BIGBRO_TOKEN", "").strip(),

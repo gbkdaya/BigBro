@@ -129,7 +129,8 @@ async function enterApp(){
     const r = await fetch("/api/health", {headers: {Authorization: "Bearer " + token}});
     if (!r.ok) throw new Error("unauthorized");
     const h = await r.json();
-    $("#meta").textContent = h.provider + "/" + h.model + " · " + h.capabilities.length + " capabilities";
+    const src = h.model_source ? " (" + h.model_source + ")" : "";
+    $("#meta").textContent = h.provider + "/" + h.model + src + " · " + h.capabilities.length + " capabilities";
   } catch(e) {}
 }
 function greet(){

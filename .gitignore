@@ -7,6 +7,9 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# free-model auto-pick cache (regenerated daily)
+.free_model_cache.json
+
 # generated during BigBro sessions
 workspace/projects/
 workspace/sessions/

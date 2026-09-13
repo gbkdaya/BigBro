@@ -21,14 +21,25 @@ pip install -r requirements.txt
 cp .env.example .env          # then edit .env: pick a provider + paste your API key
 ```
 
-Pick your brain (all four are wired up, switch anytime):
+Pick your brain (all are wired up, switch anytime):
 
-| Provider        | `.env` settings                                                        |
-|-----------------|------------------------------------------------------------------------|
-| OpenAI          | `BIGBRO_PROVIDER=openai` + `OPENAI_API_KEY=...`                          |
-| Anthropic       | `BIGBRO_PROVIDER=anthropic` + `ANTHROPIC_API_KEY=...`                     |
-| Google Gemini   | `BIGBRO_PROVIDER=gemini` + `GEMINI_API_KEY=...`                           |
-| Local Ollama    | `BIGBRO_PROVIDER=ollama` (+ `OLLAMA_MODEL`, runs fully offline)          |
+| Provider      | `.env` settings                                                        |
+|---------------|------------------------------------------------------------------------|
+| **Free (default)** | `BIGBRO_PROVIDER=free` + `OPENROUTER_API_KEY=...` — free account, no credit card. BigBro **auto-picks the newest free tool-capable model** (re-checked daily) |
+| OpenRouter    | `BIGBRO_PROVIDER=openrouter` + `BIGBRO_MODEL=<any model>` (free or paid) |
+| OpenAI        | `BIGBRO_PROVIDER=openai` + `OPENAI_API_KEY=...`                          |
+| Anthropic     | `BIGBRO_PROVIDER=anthropic` + `ANTHROPIC_API_KEY=...`                     |
+| Google Gemini | `BIGBRO_PROVIDER=gemini` + `GEMINI_API_KEY=...`                           |
+| Local Ollama  | `BIGBRO_PROVIDER=ollama` (+ `OLLAMA_MODEL`, fully offline, zero accounts) |
+
+### Model policy — always the latest free model
+
+The default `free` mode implements the standing policy: *always use the latest free model*.
+At startup BigBro reads OpenRouter's public model list, keeps the models with **zero pricing**
+that support **tool calling**, and uses the most recently released one. The pick is cached for
+24 h (`.free_model_cache.json`) and falls back to a known-good free model when offline.
+Which model is answering is shown in the CLI banner and the dashboard header.
+Set `BIGBRO_MODEL` to pin a specific model if you prefer a stable one.
 
 ### Talk to BigBro — terminal
 

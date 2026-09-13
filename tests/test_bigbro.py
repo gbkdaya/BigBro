@@ -89,3 +89,75 @@ def test_user_capability_discovery(tmp_path):
 def test_example_custom_capability_loaded_by_default(tmp_path):
     bb = make_bb(tmp_path)
     assert "save_note" in {c.name for c in bb.caps}
+
+
+FAKE_MODEL_LIST = {
+    "data": [
+        {"id": "old/free-old:free", "created": 1000,
+         "pricing": {"prompt": "0", "completion": "0"}, "supported_parameters": ["tools"]},
+        {"id": "paid/latest-paid", "created": 9999,
+         "pricing": {"prompt": "0.000001", "completion": "0.000002"}, "supported_parameters": ["tools"]},
+        {"id": "newest/free-with-tools:free", "created": 9000,
+         "pricing": {"prompt": "0", "completion": "0"}, "supported_parameters": ["tools", "max_tokens"]},
+        {"id": "free-but-no-tools:free", "created": 9500,
+         "pricing": {"prompt": "0", "completion": "0"}, "supported_parameters": []},
+    ]
+}
+
+
+class _FakeResp:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return FAKE_MODEL_LIST
+
+
+def test_pick_latest_free_model_selects_newest_free_with_tools(monkeypatch):
+    from bigbro.llm import free_model
+
+    monkeypatch.setattr(free_model.requests, "get", lambda *a, **k: _FakeResp())
+    assert free_model.pick_latest_free_model() == "newest/free-with-tools:free"
+
+
+def test_resolve_free_model_cache_and_fallback(tmp_path, monkeypatch):
+    import json as _json
+    import time as _time
+
+    from bigbro.llm import free_model
+
+    cache = tmp_path / "cache.json"
+
+    # 1) fresh cache → used without any network
+    def boom(*a, **k):
+        raise AssertionError("fresh cache must not hit the network")
+
+    monkeypatch.setattr(free_model.requests, "get", boom)
+    cache.write_text(_json.dumps({"ts": _time.time(), "model": "cached/model:free"}))
+    model, source = free_model.resolve_free_model(cache_file=cache)
+    assert model == "cached/model:free" and source == "cache"
+
+    # 2) stale cache + offline → fallback constant
+    cache.write_text(_json.dumps({"ts": _time.time() - 10**7, "model": "cached/model:free"}))
+    model, source = free_model.resolve_free_model(cache_file=cache)
+    assert source == "fallback" and model == free_model.FALLBACK_FREE_MODEL
+
+    # 3) stale cache + live list → picks newest free+tools and refreshes cache
+    monkeypatch.setattr(free_model.requests, "get", lambda *a, **k: _FakeResp())
+    model, source = free_model.resolve_free_model(cache_file=cache)
+    assert source == "live" and model == "newest/free-with-tools:free"
+    assert _json.loads(cache.read_text())["model"] == "newest/free-with-tools:free"
+
+
+def test_free_provider_requires_key(monkeypatch):
+    from bigbro.config import Config
+    from bigbro.llm import make_provider
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
+        make_provider(Config(provider="free"))
+
+
+def test_default_provider_is_free():
+    from bigbro.config import Config
+    assert Config().provider == "free"

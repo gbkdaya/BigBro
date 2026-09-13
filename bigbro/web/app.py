@@ -49,6 +49,7 @@ def create_app(cfg: Config) -> FastAPI:
             "ok": True,
             "provider": cfg.provider,
             "model": bb.provider.model,
+            "model_source": getattr(bb.provider, "model_source", ""),
             "capabilities": [c.name for c in bb.caps],
         }
 

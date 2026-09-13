@@ -36,8 +36,12 @@ def main():
         sys.exit(1)
 
     console.print(Panel(BANNER, border_style="cyan"))
+    brain = f"{cfg.provider}/{bb.provider.model}"
+    src = getattr(bb.provider, "model_source", "")
+    if src:
+        brain += f"  [{src}]"
     console.print(
-        f"[dim]brain: {cfg.provider}/{bb.provider.model} · workspace: {cfg.workspace} · "
+        f"[dim]brain: {brain} · workspace: {cfg.workspace} · "
         f"capabilities: {len(bb.caps)}[/dim]\n"
     )
 

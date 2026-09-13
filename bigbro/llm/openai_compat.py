@@ -13,6 +13,7 @@ from .base import ChatResult, LLMProvider, ToolCall
 
 class OpenAICompatProvider(LLMProvider):
     name = "openai-compat"
+    model_source = ""  # e.g. "auto: latest free model (live)" for free mode
 
     def __init__(self, base_url: str, api_key: str, model: str, temperature: float = 0.2,
                  timeout: int = 600, key_required: bool = True):
