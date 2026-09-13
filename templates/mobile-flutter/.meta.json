@@ -1,0 +1,1 @@
+{"title": "Flutter mobile app", "stack": "Flutter (Dart 3)", "next_steps": "cd into the project, then: flutter create . --org com.yourorg && flutter pub get && flutter run"}

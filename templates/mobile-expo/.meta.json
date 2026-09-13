@@ -1,0 +1,1 @@
+{"title": "React Native mobile app (Expo)", "stack": "React Native, Expo SDK 51", "next_steps": "cd into the project, then: npm install && npx expo start (scan QR with Expo Go)"}

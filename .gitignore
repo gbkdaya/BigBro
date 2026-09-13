@@ -1,0 +1,16 @@
+# private config — never commit
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# generated during BigBro sessions
+workspace/projects/
+workspace/sessions/
+workspace/notes.md
+
+# os
+.DS_Store

@@ -1,0 +1,16 @@
+services:
+  bigbro:
+    build: .
+    # Your provider keys + provider choice come from .env (see .env.example)
+    env_file:
+      - .env
+    environment:
+      BIGBRO_HOST: 0.0.0.0
+    ports:
+      # Local-only: the dashboard is reachable at http://127.0.0.1:8321
+      # (change the left side only if you deliberately want network access — keep the token strong)
+      - "127.0.0.1:8321:8321"
+    volumes:
+      # Your projects, session transcripts and notes persist here
+      - ./workspace:/app/workspace
+    restart: unless-stopped

@@ -1,0 +1,1 @@
+{"title": "FastAPI backend", "stack": "Python, FastAPI", "next_steps": "cd into the project, then: pip install -r requirements.txt && uvicorn main:app --reload (docs at /docs)"}
